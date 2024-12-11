@@ -20,6 +20,7 @@ list(APPEND CMAKE_MODULE_PATH "${TCK_CMAKE_SCRIPT_DIR}")
 
 include(CheckCompilerFlags)
 include(TcheckerUtils)
+include_directories(${PROJECT_SOURCE_DIR}/tchecker/include)
 
 # The project version number.
 set(VERSION_MAJOR   0   CACHE STRING "Project major version number.")

@@ -18,6 +18,10 @@
 #include "tchecker/utils/log.hh"
 #include "zg-covreach.hh"
 #include "zg-reach.hh"
+//#include "TCheckerRunner.h"
+
+//void count_locations(const tchecker::parsing::system_declaration_t & sysdecl);
+
 
 /*!
  \file tck-reach.cc
@@ -317,6 +321,8 @@ void covreach(tchecker::parsing::system_declaration_t const & sysdecl)
 /*!
  \brief Main function
 */
+
+/*original main function
 int main(int argc, char * argv[])
 {
   try {
@@ -379,3 +385,291 @@ int main(int argc, char * argv[])
 
   return EXIT_SUCCESS;
 }
+
+*/
+
+int main(int argc, char * argv[])
+{
+  try {
+    int optindex = parse_command_line(argc, argv);
+
+    if (argc - optindex > 1) {
+      std::cerr << "Too many input files" << std::endl;
+      usage(argv[0]);
+      return EXIT_FAILURE;
+    }
+
+    if ((certificate == CERTIFICATE_CONCRETE) && (algorithm != ALGO_COVREACH) && (algorithm != ALGO_REACH)) {
+      std::cerr << "Concrete counter-example is only available for algorithms covreach and reach" << std::endl;
+      return EXIT_FAILURE;
+    }
+
+    if (help) {
+      usage(argv[0]);
+      return EXIT_SUCCESS;
+    }
+
+    std::string input_file = (optindex == argc ? "" : argv[optindex]);
+
+    std::shared_ptr<tchecker::parsing::system_declaration_t> sysdecl{load_system_declaration(input_file)};
+
+    if (tchecker::log_error_count() > 0)
+      return EXIT_FAILURE;
+
+    std::shared_ptr<std::ofstream> os_ptr{nullptr};
+
+    if (certificate != CERTIFICATE_NONE && output_file != "") {
+      try {
+        os_ptr = std::make_shared<std::ofstream>(output_file);
+        os = os_ptr.get();
+      }
+      catch (std::exception & e) {
+        std::cerr << tchecker::log_error << e.what() << std::endl;
+        return EXIT_FAILURE;
+      }
+    }
+
+    switch (algorithm) {
+    case ALGO_REACH: {
+      // Initialize components for generateTrace
+      tchecker::zg::zg_t ts(*sysdecl);  // Transition system
+      tchecker::zg::graph_t graph(ts.system().locations_count());  // Graph
+      boost::dynamic_bitset<> labels(ts.system().locations_count());
+      tchecker::algorithms::reach::stats_t stats;
+
+      // Specify the target location
+      std::string target_location = "ql";  // Replace with your target location name
+
+      // Create an algorithm instance
+      tchecker::algorithms::reach::algorithm_t<tchecker::zg::zg_t, tchecker::zg::graph_t> algorithm;
+
+      // Call generateTrace
+      auto trace = algorithm.generateTrace(ts, graph, labels, *tchecker::waiting::factory<tchecker::zg::graph_t::node_sptr_t>(
+                                                                 tchecker::waiting::policy_t::FIFO),
+                                            stats, target_location);
+
+      // Output the generated trace
+      std::cout << "Generated trace to location " << target_location << ":\n";
+      for (const auto & [event, zone] : trace) {
+        std::cout << "Event: " << event << ", Zone: " << zone << std::endl;
+      }
+      break;
+    }
+    case ALGO_CONCUR19:
+      concur19(*sysdecl);
+      break;
+    case ALGO_COVREACH:
+      covreach(*sysdecl);
+      break;
+    default:
+      throw std::runtime_error("No algorithm specified");
+    }
+  }
+  catch (std::exception & e) {
+    std::cerr << tchecker::log_error << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
+  return EXIT_SUCCESS;
+}
+
+
+
+
+
+void count_locations(const tchecker::parsing::system_declaration_t & sysdecl) {
+    size_t location_count = 0;
+
+    // Iterate over locations in the system declaration
+    for (const auto & decl : sysdecl.locations()) {
+        const auto & location = dynamic_cast<const tchecker::parsing::location_declaration_t &>(*decl);
+        std::cout << "Location Name: " << location.name() << "\n";
+        ++location_count;
+    }
+
+    std::cout << "Total Locations: " << location_count << "\n";
+}
+
+
+// Function to count and display locations
+void count_locations(const tchecker::parsing::system_declaration_t &sysdecl) {
+    size_t location_count = 0;
+    //std::cout << "AM INSIDE " ;
+          
+    // Iterate over declarations
+    for (const auto &decl : sysdecl.declarations()) { 
+        // Check if this declaration is a location
+        if (auto location = dynamic_cast<const tchecker::parsing::location_declaration_t *>(decl.get())) {
+            std::cout << "Parsing Locations:Location Name: " << location->name() << "\n";
+            ++location_count;
+        }
+    }
+
+    std::cout << "Total Locations: " << location_count << "\n";
+}
+
+void explore_zone_graph(std::shared_ptr<tchecker::ta::system_t const> system) {
+    // Create the zone graph
+    std::shared_ptr<tchecker::zg::zg_t> zone_graph(tchecker::zg::factory(
+        system, tchecker::ts::SHARING, tchecker::zg::ELAPSED_SEMANTICS, tchecker::zg::NO_EXTRAPOLATION, 1024, 1024));
+
+    // Initialize and explore the zone graph
+    std::vector<tchecker::zg::zg_t::sst_t> initial_states;
+    zone_graph->initial(initial_states);
+
+    std::cout << "Initial States:\n";
+    for (const auto &[status, state, trans] : initial_states) {
+        std::cout << "State: " << state->vloc()
+                  << ", Zone: " << tchecker::to_string(state->zone(), system->clock_variables().flattened().index()) << std::endl;
+    }
+
+    // Explore the zone graph
+    std::cout << "\nZone Graph Exploration:\n";
+    for (const auto &[status, state, trans] : initial_states) {
+        std::vector<tchecker::zg::zg_t::sst_t> successors;
+        zone_graph->next(tchecker::zg::const_state_sptr_t{state}, successors, tchecker::STATE_OK);
+
+        for (const auto &[s_status, succ_state, succ_trans] : successors) {
+            std::cout << "From State: " << state->vloc() << " -> To State: " << succ_state->vloc()
+                      << ", Zone: " << tchecker::to_string(succ_state->zone(), system->clock_variables().flattened().index()) << std::endl;
+        }
+    }
+}
+
+void explore_zone_graph(const std::string &input_file, const std::string &labels = "") {
+    // Parse the system
+    auto system = parse_system(input_file);
+
+    // Create the zone graph
+    std::shared_ptr<tchecker::zg::zg_t> zone_graph = tchecker::zg::factory(
+        system, tchecker::ts::SHARING, tchecker::zg::ELAPSED_SEMANTICS, tchecker::zg::NO_EXTRAPOLATION, 1024, 1024);
+
+    // Create the reachability graph
+    std::shared_ptr<tchecker::tck_reach::zg_reach::graph_t> graph =
+        std::make_shared<tchecker::tck_reach::zg_reach::graph_t>(zone_graph, 1024, 1024);
+
+    // Run the reachability algorithm
+    tchecker::tck_reach::zg_reach::algorithm_t algorithm;
+    boost::dynamic_bitset<> accepting_labels = system->as_syncprod_system().labels(labels);
+
+    tchecker::algorithms::reach::stats_t stats = algorithm.run(*zone_graph, *graph, accepting_labels, tchecker::waiting::DFS);
+
+    // Print the results
+    std::cout << "Zone Graph Exploration:\n";
+    for (auto const &node : graph->nodes()) {
+        std::cout << "State: " << node->state()->vloc() << ", Zone: "
+                  << tchecker::to_string(node->state()->zone(), system->clock_variables().flattened().index()) << "\n";
+
+        for (auto const &edge : graph->outgoing_edges(node)) {
+            auto const &target_node = graph->target(edge);
+            std::cout << "  Transition to State: " << target_node->state()->vloc() << ", Zone: "
+                      << tchecker::to_string(target_node->state()->zone(), system->clock_variables().flattened().index())
+                      << "\n";
+        }
+    }
+}
+
+int main(int argc, char **argv) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <system_file>\n";
+        return 1;
+    }
+
+    std::string input_file = argv[1];
+      // Open the file
+    //std::FILE * f = std::fopen(input_file.c_str(), "r");
+    std::FILE * f = std::fopen("/Users/shyamkarra/Desktop/Parametric-Git-Repos/PV-of-General-DTN/cegar/cegar-Implementation/tchecker-runner/tchecker-edited/examples/MyExamples/Toyexamples/toyexample3.txt", "r");
+    if (f == nullptr) {
+        std::cerr << "Failed to open the file: " << input_file << "\n";
+        return 1;
+    }
+
+    // Parse the system declaration
+    auto sysdecl = tchecker::parsing::parse_system_declaration(f, "toyexample1.txt");
+    //std::fclose(f);
+
+
+    if (!sysdecl) {
+        std::cerr << "Failed to parse system declaration. Check logs.\n";
+        return 1;
+    }
+
+    // Count and display locations
+    count_locations(*sysdecl);
+    try {
+        // Convert the system declaration to a system object
+        std::shared_ptr<tchecker::ta::system_t const> system = std::make_shared<tchecker::ta::system_t>(*sysdecl);
+
+        // Explore the zone graph
+        explore_zone_graph(system);
+
+    } catch (const std::exception &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+      tchecker::clock_id_t dim = 3; // Example dimension (2 clocks + 1)
+
+    // Allocate the DBM (difference bound matrix)
+    tchecker::dbm::db_t dbm[dim * dim];
+
+    // Initialize the zone as universal (no constraints)
+    tchecker::dbm::universal_positive(dbm, dim);
+
+    std::cout << "Universal Zone (DBM):" << std::endl;
+    for (tchecker::clock_id_t i = 0; i < dim; ++i) {
+        for (tchecker::clock_id_t j = 0; j < dim; ++j) {
+            // Access the DBM element
+            tchecker::dbm::db_t entry = dbm[i * dim + j];
+
+            // Print based on the type of entry
+            
+            std::cout << tchecker::dbm::value(entry) << "\t"; // Print numeric constraint
+            
+        }
+        std::cout << std::endl;
+    }
+    //auto system = tchecker::system::parse_system_declaration("input_file.txt");
+  //  std::shared_ptr<tchecker::ta::system_t const> system = std::make_shared<tchecker::ta::system_t>(*sysdecl);
+//if (!system) {
+//    std::cerr << "Failed to construct system_t from sysdecl." << std::endl;
+ //   return 1;
+//}
+tchecker::zg::zg_t * zone_graph = tchecker::zg::factory(
+        system,                              // Parsed system
+        tchecker::ts::SHARING,              // Sharing type
+        tchecker::zg::STANDARD_SEMANTICS,   // Semantics type
+        tchecker::zg::NO_EXTRAPOLATION,     // Extrapolation type
+        1024,                               // Block size
+        1024                                // Table size
+    );
+
+    if (zone_graph == nullptr) {
+        std::cerr << "Failed to create zone graph." << std::endl;
+        return 1;
+    }
+
+    std::cout << "Zone graph successfully created!" << std::endl;
+
+    // Log zone graph initial states (as an example)
+   std::vector<tchecker::zg::zg_t::sst_t> initial_states;
+zone_graph->initial(initial_states, tchecker::STATE_OK);
+
+// Iterate over states
+for (auto const & [status, state, transition] : initial_states) {
+    std::cout << "State ID: " << state->vloc() << ", Zone: " << std::endl;
+
+    // Access and print the DBM
+    tchecker::dbm::db_t const * my_dbm = state->zone().dbm();
+    tchecker::clock_id_t dim = state->zone().dim();
+
+    for (tchecker::clock_id_t i = 0; i < dim; ++i) {
+        for (tchecker::clock_id_t j = 0; j < dim; ++j) {
+            std::cout << tchecker::dbm::value(my_dbm[i * dim + j]) << "\t";
+        }
+        std::cout << std::endl;
+    }
+}
+    return 0;
+}
+*/

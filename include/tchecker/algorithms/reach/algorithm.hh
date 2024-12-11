@@ -126,7 +126,7 @@ private:
   The number of visited nodes and reachability of a satisfying node have been
   set in stats.
   */
-  void run_from_waiting(TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
+ /* void run_from_waiting(TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
                         tchecker::waiting::waiting_t<typename GRAPH::node_sptr_t> & waiting,
                         tchecker::algorithms::reach::stats_t & stats)
   {
@@ -158,6 +158,320 @@ private:
 
     waiting.clear();
   }
+*/
+/*!
+\brief Build a reachability graph of a transition system from a waiting
+container while avoiding specific zone paths
+\param ts : a transition system
+\param graph : a graph
+\param labels : accepting labels
+\param waiting : a waiting container
+\param stats : statistics
+\post graph is built from a traversal of ts starting from the nodes in
+waiting, until a state that satisfies labels is reached (if any).
+A node is created for each reachable state in ts, and an edge is
+created for each transition in ts. The order in which the nodes of ts are
+visited depends on the policy implemented by waiting.
+The number of visited nodes and reachability of a satisfying node have been
+set in stats.
+*/
+/*void run_from_waiting(TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
+                      tchecker::waiting::waiting_t<typename GRAPH::node_sptr_t> & waiting,
+                      tchecker::algorithms::reach::stats_t & stats) {
+    std::vector<typename TS::sst_t> sst;
+
+    // Define paths to avoid
+    std::vector<std::vector<std::pair<std::string, std::string>>> avoid_paths = {
+        {{"locg1less", "(1<=x)"}, {"locg1", "(1<=x<2)"}},
+        {{"a", "(0<=x)"}, {"b", "(0<=x)"}, {"c", "(0<=x)"}}
+    };
+
+    // Map to track active path progress for each node
+    std::unordered_map<typename GRAPH::node_sptr_t, std::vector<size_t>> node_active_paths;
+
+    while (!waiting.empty()) {
+        auto node = waiting.first();
+        waiting.remove_first();
+
+        ++stats.visited_states();
+
+        // Check if the node satisfies the accepting condition
+        if (accepting(node, ts, labels)) {
+            node->final(true);
+            stats.reachable() = true;
+            break;
+        }
+
+        // Generate successors
+        ts.next(node->state_ptr(), sst);
+
+        for (auto && [status, s, t] : sst) {
+            // Access the vedge from the transition
+            const auto &vedge = t->vedge();
+
+            // Retrieve the event name for the first valid edge in vedge
+            std::string event_name;
+            for (auto edge_id : vedge) {
+                if (edge_id != tchecker::NO_EDGE) {
+                    auto edge = ts.system().edge(edge_id);
+                    event_name = ts.system().event_name(edge->event_id());
+                    break;  // Only need the first edge's event name
+                }
+            }
+
+            // Get the zone string
+            std::string zone_str = tchecker::to_string(s->zone(), ts.system().clock_variables().flattened().index());
+
+            // Check if this transition should be avoided
+            bool avoid = false;
+            for (const auto &path : avoid_paths) {
+                size_t progress = 0;
+
+                // Check if the current transition matches the current progress in the path
+                if (path[progress].first == event_name && path[progress].second == zone_str) {
+                    ++progress;
+
+                    // If we've matched the entire path, avoid the transition
+                    if (progress == path.size()) {
+                        avoid = true;
+                        break;
+                    }
+                }
+            }
+
+            if (avoid) continue;
+
+            // Add the successor node to the graph and waiting list
+            auto && [is_new_node, next_node] = graph.add_node(s);
+            if (is_new_node) {
+                waiting.insert(next_node);
+            }
+            graph.add_edge(node, next_node, *t);
+
+            ++stats.visited_transitions();
+        }
+        sst.clear();
+    }
+
+    waiting.clear();
+}*/
+//The following function avoids location paths that have an avoilocguard as its subsequnce. the avoidlocguards are hardcoded
+void run_from_waiting(TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
+                      tchecker::waiting::waiting_t<typename GRAPH::node_sptr_t> & waiting,
+                      tchecker::algorithms::reach::stats_t & stats) {
+    std::vector<typename TS::sst_t> sst;
+
+    // Hardcoded avoidance logic
+    std::vector<std::vector<std::pair<std::string, std::string>>> avoid_paths = {
+        {{"zone0", "event1"}, {"zone1", "event2"}, {"zone2", "event3"}},  // seq1
+        {{"zone4", "event4"}, {"zone5", "event5"}}                       // seq2
+    };
+
+    std::vector<size_t> matched_indices(avoid_paths.size(), 0);
+
+    while (!waiting.empty()) {
+        auto node = waiting.first();
+        waiting.remove_first();
+
+        ++stats.visited_states();
+
+        if (accepting(node, ts, labels)) {
+            node->final(true);
+            stats.reachable() = true;
+            break;
+        }
+
+        ts.next(node->state_ptr(), sst);
+
+        for (auto && [status, s, t] : sst) {
+            const auto &vedge = t->vedge();
+            std::string event_name;
+
+            for (auto edge_id : vedge) {
+                if (edge_id != tchecker::NO_EDGE) {
+                    auto edge = ts.system().edge(edge_id);
+                    event_name = ts.system().event_name(edge->event_id());
+                    break;
+                }
+            }
+
+            std::string pred_zone_str = tchecker::to_string(node->state_ptr()->zone(),
+                                                            ts.system().clock_variables().flattened().index());
+
+            bool avoid = false;
+
+            for (size_t i = 0; i < avoid_paths.size(); ++i) {
+                const auto &sequence = avoid_paths[i];
+                size_t matched_idx = matched_indices[i];
+
+                if (matched_idx < sequence.size() &&
+                    sequence[matched_idx].first == pred_zone_str &&
+                    sequence[matched_idx].second == event_name) {
+                    matched_indices[i]++;
+                } else {
+                    matched_indices[i] = 0;  // Reset if mismatch
+                }
+
+                if (matched_indices[i] == sequence.size()) {
+                    avoid = true;
+                    break;  // Fully matched sequence
+                }
+            }
+
+            if (avoid) {
+                continue;
+            }
+
+            auto && [is_new_node, next_node] = graph.add_node(s);
+            if (is_new_node) {
+                waiting.insert(next_node);
+            }
+            graph.add_edge(node, next_node, *t);
+
+            ++stats.visited_transitions();
+        }
+        sst.clear();
+    }
+
+    waiting.clear();
+}
+
+
+//generate a zone path: this function is a modification of run_from_Waiting of the tchecker original function and it outputs zone path to a speicfic locaiton
+std::vector<std::pair<std::string, std::string>> generateTrace(
+    TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
+    tchecker::waiting::waiting_t<typename GRAPH::node_sptr_t> & waiting,
+    tchecker::algorithms::reach::stats_t & stats, 
+    const std::string &target_location) 
+{
+    std::vector<typename TS::sst_t> sst;
+    std::vector<std::pair<std::string, std::string>> zone_path; // To store the zone path
+
+    while (!waiting.empty()) {
+        node_sptr_t node = waiting.first();
+        waiting.remove_first();
+
+        ++stats.visited_states();
+
+        // Check if the node satisfies the target location condition
+        if (ts.system().location(node->state_ptr())->name() == target_location) {
+            node->final(true);
+            stats.reachable() = true;
+            break; // Target location reached
+        }
+
+        // Generate successors
+        ts.next(node->state_ptr(), sst);
+
+        for (auto && [status, s, t] : sst) {
+            // Access the vedge from the transition
+            const auto &vedge = t->vedge();
+
+            // Retrieve the event name for the first valid edge in vedge
+            std::string event_name;
+            for (auto edge_id : vedge) {
+                if (edge_id != tchecker::NO_EDGE) {
+                    auto edge = ts.system().edge(edge_id);
+                    event_name = ts.system().event_name(edge->event_id());
+                    break;  // Only need the first edge's event name
+                }
+            }
+
+            // Get the zone string
+            std::string zone_str = tchecker::to_string(s->zone(), ts.system().clock_variables().flattened().index());
+
+            // Add the event and zone to the path
+            zone_path.emplace_back(event_name, zone_str);
+
+            // Add the successor node to the graph and waiting list
+            auto && [is_new_node, next_node] = graph.add_node(s);
+            if (is_new_node) {
+                waiting.insert(next_node);
+            }
+            graph.add_edge(node, next_node, *t);
+
+            ++stats.visited_transitions();
+        }
+        sst.clear();
+    }
+
+    waiting.clear();
+    return zone_path; // Return the constructed zone path
+}
+
+
+
+
+/*FOLLOWING IS WORKING VERSION run_from_waiting that works WITH ONE hardcoded avoidlocguard path AND avoids EXACT MATCHing paths*
+
+void run_from_waiting(TS & ts, GRAPH & graph, boost::dynamic_bitset<> const & labels,
+                      tchecker::waiting::waiting_t<typename GRAPH::node_sptr_t> & waiting,
+                      tchecker::algorithms::reach::stats_t & stats) {
+    std::vector<typename TS::sst_t> sst;
+
+    // Hardcoded avoidance logic for a specific path
+    const std::string avoid_event = "locg1less";
+    const std::string avoid_zone = "(1<=x)";
+
+    while (!waiting.empty()) {
+        auto node = waiting.first();
+        waiting.remove_first();
+
+        ++stats.visited_states();
+
+        // Check if the node satisfies the accepting condition
+        if (accepting(node, ts, labels)) {
+            node->final(true);
+            stats.reachable() = true;
+            break;
+        }
+
+        // Generate successors
+        ts.next(node->state_ptr(), sst);
+
+        for (auto && [status, s, t] : sst) {
+            // Access the vedge from the transition
+            const auto &vedge = t->vedge();
+
+            // Retrieve the event name for the first valid edge in vedge
+            std::string event_name;
+            for (auto edge_id : vedge) {
+                if (edge_id != tchecker::NO_EDGE) {
+                    auto edge = ts.system().edge(edge_id);
+                    event_name = ts.system().event_name(edge->event_id());
+                    break;  // Only need the first edge's event name
+                }
+            }
+
+            // Get the zone string
+            std::string zone_str = tchecker::to_string(s->zone(), ts.system().clock_variables().flattened().index());
+
+            // Skip transitions that match the avoidance criteria
+            if (event_name == avoid_event && zone_str == avoid_zone) {
+                continue;
+            }
+
+            // Add the successor node to the graph and waiting list
+            auto && [is_new_node, next_node] = graph.add_node(s);
+            if (is_new_node) {
+                waiting.insert(next_node);
+            }
+            graph.add_edge(node, next_node, *t);
+
+            ++stats.visited_transitions();
+        }
+        sst.clear();
+    }
+
+    waiting.clear();
+}
+*/
+
+
+
+
+
+
 
   /*!
    \brief Check if a node is accepting

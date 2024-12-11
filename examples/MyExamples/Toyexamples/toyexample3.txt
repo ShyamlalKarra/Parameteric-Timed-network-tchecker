@@ -1,0 +1,34 @@
+system:example
+
+clock:1:c1
+clock:1:c2
+clock:1:c3
+
+event:a
+event:b
+event:c
+event:d
+event:e
+event:f
+event:g
+event:h
+event:i
+process:P
+
+location:P:loc0 { initial:}
+location:P:loc1 {}
+location:P:loc2{}
+location:P:loc3 {}
+location:P:loc4{}
+location:P:loc5{}
+location:P:loc6 {labels:green}
+
+edge:P: loc0 : loc1 :a{provided: c1==100000000 : do:c2=0 }
+edge:P: loc1 : loc2 :b{provided: c2==4}
+edge:P: loc2 : loc1 :c{provided: c2==4: do:c1=0}
+edge:P: loc2 : loc3 :d{ }
+edge:P: loc1 : loc3 :e{ provided: c1==4: do:c2=0}
+edge:P: loc3 : loc3 :f{ provided: c1==4: do:c1=0}
+edge:P: loc3 : loc4 :g{ provided: c1==0 && c2==0}
+edge:P: loc4 : loc5 :h{ }
+edge:P: loc5 : loc6 :i{ provided: c1==3 }

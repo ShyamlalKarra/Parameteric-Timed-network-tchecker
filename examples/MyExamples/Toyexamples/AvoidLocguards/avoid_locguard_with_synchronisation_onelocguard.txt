@@ -1,0 +1,53 @@
+#labels=eating1:eating2:eating3:eating4
+#system:dining_philosophers_4_3_10_0
+system:avoid_locguards_one_locguard
+#<PATH to "build/src/tck-reach"> -a reach -C symbolic -l green  <FILE NAME with green labelled final location>
+# events
+
+event:locg1
+event:locg1less
+event:a
+event:b
+event:c
+
+
+# Philosopher 1
+process:P1
+clock:1:x
+location:P1:q0{initial:}
+location:P1:q1{}
+location:P1:ql{labels:green1}
+location:P1:q2{}
+location:P1:q3{}
+location:P1:gamma1{}
+edge:P1:q0:q1:locg1less{provided: x>=1}
+edge:P1:q1:ql:locg1{provided: x<2}
+edge:P1:q0:q2:a{}
+edge:P1:q2:q3:b{}
+edge:P1:q3:ql:c{}
+
+
+
+
+# Process that models ALG= {}
+process:P2
+clock:1:t
+
+location:P2:r0{initial::labels:green2}
+location:P2:r1{labels:green2}
+location:P2:rsad{labels:red2}
+location:P2:rhappy{lablels:green2}
+
+edge:P2:r0:r1:locg1less{provided:1<=t}
+edge:P2:r1:rsad:locg1{provided:t<2}
+edge:P2:r0:rhappy:locg1less{provided:t<1}
+edge:P2:r1:rhappy:locg1{provided:t>2}
+
+
+
+# Synchronizations
+sync:P1@locg1less:P2@locg1less
+sync:P1@locg1:P2@locg1
+
+
+

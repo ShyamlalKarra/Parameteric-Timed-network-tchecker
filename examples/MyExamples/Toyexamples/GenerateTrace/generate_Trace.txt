@@ -1,0 +1,29 @@
+system:example
+
+# events
+event:start
+event:common
+event:path1
+event:path2
+event:path3
+
+# Unguarded automaton
+process:P1
+clock:1:x
+clock:1:y
+clock:1:z
+
+location:P1:q0 {initial:}
+location:P1:q_common {}
+location:P1:q_path1 {}
+location:P1:q_path2 {}
+location:P1:q_path3 {}
+location:P1:q_final {labels:green1}
+
+edge:P1:q0:q_common:start {provided: x==0 && y==0 && z==0}
+edge:P1:q_common:q_path1:common {provided: x>=1}
+edge:P1:q_path1:q_final:path1 {provided: z<=2 && z>=2}
+edge:P1:q_common:q_path2:common {provided: y>=1}
+edge:P1:q_path2:q_final:path2 {provided: z<=2 && z>=2}
+edge:P1:q_common:q_path3:common {provided: x>=1 && y>=1 && z>=1}
+edge:P1:q_path3:q_final:path3 {provided: z<=2 && z>=2}

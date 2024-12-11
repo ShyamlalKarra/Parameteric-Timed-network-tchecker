@@ -1,0 +1,50 @@
+system:example
+
+# events
+event:step1
+event:step2
+event:step3
+event:cycle_entry
+event:cycle_exit
+event:step4
+event:step5
+event:step6
+event:step7
+event:step8
+
+# Unguarded automaton
+process:P1
+clock:1:x
+clock:1:y
+clock:1:z
+clock:1:u
+clock:1:v
+
+location:P1:q0 {initial:}
+location:P1:q1 {}
+location:P1:q2 {}
+location:P1:q_cycle_entry {}
+location:P1:q_cycle_repeat {}
+location:P1:q_cycle_exit {}
+location:P1:q3 {}
+location:P1:q4 {}
+location:P1:q5 {}
+location:P1:q6 {}
+location:P1:q_final {labels:green1}
+
+# Transitions
+edge:P1:q0:q1:step1 {provided: x>=1}
+edge:P1:q1:q2:step2 {provided: y>=2}
+
+# Cycle: must pass through q_cycle_entry -> q_cycle_repeat -> q_cycle_exit
+edge:P1:q2:q_cycle_entry:cycle_entry {provided: z>=3}
+edge:P1:q_cycle_entry:q_cycle_repeat:step3 {provided: u<=5: u:=0}  # Reset clock u
+edge:P1:q_cycle_repeat:q_cycle_entry:cycle_entry {provided: u>=1}  # Cycles back
+edge:P1:q_cycle_repeat:q_cycle_exit:cycle_exit {provided: v<=10}
+
+# Continue after the cycle
+edge:P1:q_cycle_exit:q3:step4 {provided: x<=10}
+edge:P1:q3:q4:step5 {provided: y<=10}
+edge:P1:q4:q5:step6 {provided: z<=10}
+edge:P1:q5:q6:step7 {provided: u<=10}
+edge:P1:q6:q_final:step8 {provided: v<=10}
