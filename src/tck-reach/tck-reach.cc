@@ -321,8 +321,8 @@ void covreach(tchecker::parsing::system_declaration_t const & sysdecl)
 /*!
  \brief Main function
 */
+/*
 
-/*original main function
 int main(int argc, char * argv[])
 {
   try {
@@ -385,9 +385,100 @@ int main(int argc, char * argv[])
 
   return EXIT_SUCCESS;
 }
-
 */
 
+
+int main(int argc, char * argv[])
+{
+    try {
+        int optindex = parse_command_line(argc, argv);
+
+        if (argc - optindex > 1) {
+            std::cerr << "Too many input files" << std::endl;
+            usage(argv[0]);
+            return EXIT_FAILURE;
+        }
+
+        if ((certificate == CERTIFICATE_CONCRETE) && (algorithm != ALGO_COVREACH) && (algorithm != ALGO_REACH)) {
+            std::cerr << "Concrete counter-example is only available for algorithms covreach and reach" << std::endl;
+            return EXIT_FAILURE;
+        }
+
+        if (help) {
+            usage(argv[0]);
+            return EXIT_SUCCESS;
+        }
+
+        std::string input_file = (optindex == argc ? "" : argv[optindex]);
+
+        // Parse the system declaration
+        std::shared_ptr<tchecker::parsing::system_declaration_t> sysdecl{load_system_declaration(input_file)};
+
+        if (tchecker::log_error_count() > 0)
+            return EXIT_FAILURE;
+
+        std::shared_ptr<std::ofstream> os_ptr{nullptr};
+
+        if (certificate != CERTIFICATE_NONE && output_file != "") {
+            try {
+                os_ptr = std::make_shared<std::ofstream>(output_file);
+                os = os_ptr.get();
+            }
+            catch (std::exception & e) {
+                std::cerr << tchecker::log_error << e.what() << std::endl;
+                return EXIT_FAILURE;
+            }
+        }
+
+        switch (algorithm) {
+    case ALGO_REACH: {
+      // Initialize components for generateTrace
+      tchecker::zg::zg_t ts(*sysdecl);  // Transition system
+      tchecker::zg::graph_t graph(ts.system().locations_count());  // Graph
+      boost::dynamic_bitset<> labels(ts.system().locations_count());
+      tchecker::algorithms::reach::stats_t stats;
+
+      // Specify the target location
+      std::string target_location = "ql";  // Replace with your target location name
+
+      // Create an algorithm instance
+      tchecker::algorithms::reach::algorithm_t<tchecker::zg::zg_t, tchecker::zg::graph_t> algorithm;
+
+      // Call generateTrace
+      auto trace = algorithm.generateTrace(ts, graph, labels, *tchecker::waiting::factory<tchecker::zg::graph_t::node_sptr_t>(
+                                                                 tchecker::waiting::policy_t::FIFO),
+                                            stats, target_location);
+
+      // Output the generated trace
+      std::cout << "Generated trace to location " << target_location << ":\n";
+      for (const auto & [event, zone] : trace) {
+        std::cout << "Event: " << event << ", Zone: " << zone << std::endl;
+      }
+      break;
+    }
+    case ALGO_CONCUR19:
+      concur19(*sysdecl);
+      break;
+    case ALGO_COVREACH:
+      covreach(*sysdecl);
+      break;
+    default:
+      throw std::runtime_error("No algorithm specified");
+    }
+  }
+  catch (std::exception & e) {
+    std::cerr << tchecker::log_error << e.what() << std::endl;
+    return EXIT_FAILURE;
+  }
+
+    return EXIT_SUCCESS;
+}
+
+
+
+/* MAIN FUNCTION EDITED*/
+
+/*
 int main(int argc, char * argv[])
 {
   try {
@@ -472,9 +563,55 @@ int main(int argc, char * argv[])
 
   return EXIT_SUCCESS;
 }
+*/
 
 
 
+
+/*
+int main(int argc, char *argv[]) {
+    if (argc < 2) {
+        std::cerr << "Usage: " << argv[0] << " <input_file>" << std::endl;
+        return 1;
+    }
+
+    try {
+        //tchecker::log_t log;
+        //auto sysdecl = tchecker::parsing::parse_system_declaration("model.tck", log);
+        auto sysdecl = tchecker::parsing::parse_system_declaration( argv[1]);
+       
+        if (!sysdecl) {
+          std::cerr << "Failed to parse system.\n";
+          return -1;
+        }
+
+       // TCheckerRunner runner(argv[1]); // Pass input file to TCheckerRunner
+       //count_locations(*sysdecl);// Call the function to output states
+       size_t location_count = 0;
+
+    for (const auto &decl : *sysdecl) {
+
+      if (auto location = dynamic_cast<const tchecker::parsing::location_declaration_t *>(decl)) {
+        std::cout << "Location Name: " << location->name() << "\n";
+    }
+        //if (auto location = dynamic_cast<const tchecker::parsing::location_declaration_t *>(decl)) {
+          //  std::cout << "Location Name: " << location->name() << "\n";
+
+            // Use the print function
+            //print_location_attributes(location->attributes());
+
+            //++location_count;
+        //}
+    }
+
+    std::cout << "Total Locations: " << location_count << "\n";
+    } catch (const std::exception &e) {
+        std::cerr << "Error: " << e.what() << std::endl;
+        return 1;
+    }
+
+    return 0;
+}
 
 
 void count_locations(const tchecker::parsing::system_declaration_t & sysdecl) {
